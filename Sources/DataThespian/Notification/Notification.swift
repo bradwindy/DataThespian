@@ -32,12 +32,9 @@
   import Foundation
 
   extension Notification {
-    internal func managedObjectIDs(key: String) -> Set<ManagedObjectMetadata>? {
-      guard let objectIDs = userInfo?[key] as? Set<NSManagedObjectID> else {
-        return nil
-      }
-
-      return Set(objectIDs.compactMap(ManagedObjectMetadata.init(objectID:)))
+    /// The object IDs stored under `key`, or nil when the key is missing or holds another type.
+    internal func managedObjectIDs(key: String) -> Set<NSManagedObjectID>? {
+      userInfo?[key] as? Set<NSManagedObjectID>
     }
   }
 #endif

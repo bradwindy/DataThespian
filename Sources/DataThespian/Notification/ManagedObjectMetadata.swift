@@ -50,23 +50,36 @@
 
   #if canImport(CoreData)
     import CoreData
+    import Foundation
 
     extension ManagedObjectMetadata {
-      internal init?(objectID: NSManagedObjectID) {
-        let persistentIdentifier: PersistentIdentifier
-        do {
-          persistentIdentifier = try objectID.persistentIdentifier()
-        } catch {
-          assertionFailure(error: error)
-          return nil
-        }
-
+      /// Converts an object ID with caller-owned coders.
+      ///
+      /// - Throws: `NSManagedObjectID.PersistentIdentifierError` when the ID has no entity name,
+      ///   no store identifier, or cannot be decoded as a `PersistentIdentifier`.
+      internal init(objectID: NSManagedObjectID, encoder: JSONEncoder, decoder: JSONDecoder) throws {
         guard let entityName = objectID.entityName else {
-          assertionFailure("Missing entity name.")
+          throw NSManagedObjectID.PersistentIdentifierError.missingProperty(.entityName)
+        }
+        let persistentIdentifier = try objectID.persistentIdentifier(
+          encoder: encoder, decoder: decoder
+        )
+        self.init(entityName: entityName, persistentIdentifier: persistentIdentifier)
+      }
+
+      /// Converts an object ID, or returns nil when it has no `PersistentIdentifier`.
+      ///
+      /// An ID from a Core Data stack that SwiftData did not create cannot be converted.
+      /// That is not a programming error, so it does not assert.
+      internal init?(objectID: NSManagedObjectID) {
+        guard
+          let metadata = try? Self(
+            objectID: objectID, encoder: JSONEncoder(), decoder: JSONDecoder()
+          )
+        else {
           return nil
         }
-
-        self.init(entityName: entityName, persistentIdentifier: persistentIdentifier)
+        self = metadata
       }
 
       /// Initializes a `ManagedObjectMetadata` instance with the provided `NSManagedObject`.

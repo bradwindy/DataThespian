@@ -99,23 +99,30 @@
     /// - Throws: `PersistentIdentifierError`
     /// if the `storeIdentifier` or `entityName` properties are missing.
     public func persistentIdentifier() throws -> PersistentIdentifier {
-      guard let storeIdentifier else {
+      try persistentIdentifier(encoder: JSONEncoder(), decoder: JSONDecoder())
+    }
+
+    /// Compute PersistentIdentifier from NSManagedObjectID with caller-owned coders,
+    /// so converting a batch of IDs does not build two coders per ID.
+    internal func persistentIdentifier(
+      encoder: JSONEncoder, decoder: JSONDecoder
+    ) throws -> PersistentIdentifier {
+      let uri = uriRepresentation()
+      guard let storeIdentifier = uri.host() else {
         throw PersistentIdentifierError.missingProperty(.storeIdentifier)
       }
       guard let entityName else { throw PersistentIdentifierError.missingProperty(.entityName) }
       let json = PersistentIdentifierJSON(
-        primaryKey: primaryKey,
-        uriRepresentation: uriRepresentation(),
+        primaryKey: uri.lastPathComponent,
+        uriRepresentation: uri,
         isTemporary: isTemporaryID,
         storeIdentifier: storeIdentifier,
         entityName: entityName
       )
-      let encoder = JSONEncoder()
       let data: Data
       do { data = try encoder.encode(json) } catch let error as EncodingError {
         throw PersistentIdentifierError.encodingError(error)
       }
-      let decoder = JSONDecoder()
       do { return try decoder.decode(PersistentIdentifier.self, from: data) } catch let error
         as DecodingError
       { throw PersistentIdentifierError.decodingError(error) }
