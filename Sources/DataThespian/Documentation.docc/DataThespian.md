@@ -51,9 +51,11 @@ let package = Package(
 var body: some Scene {
   WindowGroup {
     RootView()
-  }.database(ModelActorDatabase(modelContainer: ...))
+  }.database(SharedDatabase.shared.database)
 }
 ```
+
+where `SharedDatabase` is the singleton described below.
 
 and then reference it in our SwiftUI View:
 
@@ -63,7 +65,7 @@ and then reference it in our SwiftUI View:
 
 #### Using with ModelContext
 
-If you are familiar with Core Data, you probably know that you should use a single `NSManagedObjectContext` throughout your app. The issue here is that our initializer for `ModelActorDatabase` will be called each time the SwiftUI View is redraw. So if we look at the expanded `@ModelActor` Macro for our `ModelActorDatabase`, we see that a new `ModelContext` (SwiftData wrapper or abstraction, etc.  of `NSManagedObjectContext`) is created each time:
+If you are familiar with Core Data, you probably know that you should use a single `NSManagedObjectContext` throughout your app. The issue here is that an initializer written inside `body` will be called each time the SwiftUI View is redrawn. So if we look at the expanded `@ModelActor` Macro for our `ModelActorDatabase`, we see that a new `ModelContext` (SwiftData wrapper or abstraction, etc.  of `NSManagedObjectContext`) is created each time:
 
 ```swift
 public init(modelContainer: SwiftData.ModelContainer) {
@@ -91,10 +93,12 @@ public struct SharedDatabase {
     self.schemas = schemas
     let modelContainer = modelContainer ?? .forTypes(schemas)
     self.modelContainer = modelContainer
-    self.database = database ?? ModelActorDatabase(modelContainer: modelContainer)
+    self.database = database ?? BackgroundDatabase(modelContainer: modelContainer)
   }
 }
 ```
+
+Use ``BackgroundDatabase`` here rather than ``ModelActorDatabase``. A `ModelActorDatabase` creates its `ModelContext` on the thread that calls its initializer, and SwiftData runs the actor's work on that context's queue, so one built on the main actor runs every query on the main thread. `BackgroundDatabase` creates its database lazily in a background task. If you need a `ModelActorDatabase` itself, create it with ``ModelActorDatabase/makeInBackground(modelContainer:modelContext:)``.
 
 Then in your SwiftUI code:
 

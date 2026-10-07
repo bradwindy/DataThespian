@@ -38,6 +38,11 @@
     public nonisolated let modelContainer: SwiftData.ModelContainer
 
     /// Initializes a new `ModelActorDatabase` with the given `modelContainer`.
+    ///
+    /// The `ModelContext` is created on the thread that calls this initializer, and SwiftData
+    /// runs the actor's work on that context's queue. Called on the main actor, every query
+    /// then runs on the main thread. Prefer ``BackgroundDatabase``, or
+    /// ``makeInBackground(modelContainer:modelContext:)``.
     /// - Parameter modelContainer: The model container to use for this database.
     public init(modelContainer: SwiftData.ModelContainer) {
       self.init(
@@ -48,6 +53,11 @@
 
     /// Initializes a new `ModelActorDatabase` with
     /// the given `modelContainer` and a custom `modelContext` closure.
+    ///
+    /// The `ModelContext` is created on the thread that calls this initializer, and SwiftData
+    /// runs the actor's work on that context's queue. Called on the main actor, every query
+    /// then runs on the main thread. Prefer ``BackgroundDatabase``, or
+    /// ``makeInBackground(modelContainer:modelContext:)``.
     /// - Parameters:
     ///   - modelContainer: The model container to use for this database.
     ///   - closure: A closure that creates a
@@ -64,6 +74,11 @@
 
     /// Initializes a new `ModelActorDatabase` with
     /// the given `modelContainer` and a custom `modelExecutor` closure.
+    ///
+    /// `closure` runs on the thread that calls this initializer. An executor that wraps a
+    /// context created there runs its work on that context's queue, so build it off the main
+    /// actor unless main-thread execution is what you want. See
+    /// ``makeInBackground(modelContainer:modelExecutor:)``.
     /// - Parameters:
     ///   - modelContainer: The model container to use for this database.
     ///   - closure: A closure that creates
@@ -76,6 +91,39 @@
         modelExecutor: closure(modelContainer),
         modelContainer: modelContainer
       )
+    }
+
+    /// Creates a `ModelActorDatabase` on a detached task, so its `ModelContext` is never
+    /// created on the caller's actor, and its work never runs on the main thread because the
+    /// caller was on the main actor.
+    /// - Parameters:
+    ///   - modelContainer: The model container to use for this database.
+    ///   - closure: A closure that creates a custom `ModelContext` from the `ModelContainer`.
+    /// - Returns: The new database.
+    public static func makeInBackground(
+      modelContainer: SwiftData.ModelContainer,
+      modelContext closure: @Sendable @escaping (ModelContainer) -> ModelContext = ModelContext.init
+    ) async -> ModelActorDatabase {
+      await Task.detached {
+        ModelActorDatabase(modelContainer: modelContainer, modelContext: closure)
+      }
+      .value
+    }
+
+    /// Creates a `ModelActorDatabase` on a detached task, so `closure` never runs on the
+    /// caller's actor.
+    /// - Parameters:
+    ///   - modelContainer: The model container to use for this database.
+    ///   - closure: A closure that creates a custom `ModelExecutor` from the `ModelContainer`.
+    /// - Returns: The new database.
+    public static func makeInBackground(
+      modelContainer: SwiftData.ModelContainer,
+      modelExecutor closure: @Sendable @escaping (ModelContainer) -> any ModelExecutor
+    ) async -> ModelActorDatabase {
+      await Task.detached {
+        ModelActorDatabase(modelContainer: modelContainer, modelExecutor: closure)
+      }
+      .value
     }
 
     private init(modelExecutor: any ModelExecutor, modelContainer: ModelContainer) {

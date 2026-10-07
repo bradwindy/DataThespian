@@ -79,12 +79,14 @@ let package = Package(
 
 When working with SwiftData, it's crucial to use a single `ModelContext` throughout your app. There are two ways to create your database:
 
-#### Using Built-in ModelActorDatabase
+#### Using Built-in BackgroundDatabase
 
 ```swift
-// Create a database using the built-in ModelActorDatabase
-let database = ModelActorDatabase(modelContainer: container)
+// Create a database whose ModelContext is built off the main thread
+let database = BackgroundDatabase(modelContainer: container)
 ```
+
+`ModelActorDatabase(modelContainer:)` creates its `ModelContext` on the calling thread, and SwiftData runs the actor's work on that context's queue. Built on the main actor, it runs every query on the main thread. Prefer `BackgroundDatabase`, or create one with `await ModelActorDatabase.makeInBackground(modelContainer: container)`.
 
 #### Creating Your Own Database Type
 
@@ -117,7 +119,7 @@ public struct SharedDatabase {
         // add cde to handle schema failure
         let modelContainer = try! modelContainer ?? ModelContainer(for: Schema(forTypes))
         self.modelContainer = modelContainer
-        self.database = database ?? ModelActorDatabase(modelContainer: modelContainer)
+        self.database = database ?? BackgroundDatabase(modelContainer: modelContainer)
     }
 }
 ```
