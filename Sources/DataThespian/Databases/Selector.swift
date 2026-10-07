@@ -64,7 +64,6 @@
     ///   - key: The unique key to search for.
     ///   - value: The value of the unique key to search for.
     /// - Returns: A `Selector.Get` case that can be used to retrieve the `PersistentModel` instance.
-    @available(*, unavailable, message: "Not implemented yet.")
     public static func unique<UniqueKeyableType: UniqueKey>(
       _ key: UniqueKeyableType,
       equals value: UniqueKeyableType.ValueType

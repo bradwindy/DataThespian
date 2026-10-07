@@ -29,8 +29,6 @@
 
 public import Foundation
 
-// swiftlint:disable unavailable_function
-
 /// A struct that represents a unique key path for a model type.
 @_documentation(visibility: internal)
 public struct UniqueKeyPath<Model: Unique, ValueType: Sendable & Equatable & Codable>: UniqueKey {
@@ -46,11 +44,18 @@ public struct UniqueKeyPath<Model: Unique, ValueType: Sendable & Equatable & Cod
 
   /// Creates a predicate that checks if the value of the key path is equal to the given value.
   ///
+  /// SwiftData can translate the predicate only when the key path names a stored, persisted
+  /// attribute. For any other key path the fetch throws.
+  ///
   /// - Parameter value: The value to compare against.
   /// - Returns: A predicate that can be used to filter models.
   public func predicate(equals value: ValueType) -> Predicate<Model> {
-    fatalError("Not implemented yet.")
+    let keyPath = self.keyPath
+    return Predicate<Model> { model in
+      PredicateExpressions.build_Equal(
+        lhs: PredicateExpressions.build_KeyPath(root: model, keyPath: keyPath),
+        rhs: PredicateExpressions.build_Arg(value)
+      )
+    }
   }
 }
-
-// swiftlint:enable unavailable_function
