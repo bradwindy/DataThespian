@@ -46,6 +46,16 @@
 
     /// Retrieves a persistent model of the specified type with the given persistent identifier.
     ///
+    /// A model registered in this context is used when it has unsaved changes: an inserted,
+    /// unsaved model has a temporary identifier that a store fetch is not guaranteed to match.
+    /// A registered model that is deleted in this context resolves to `nil`. Everything else
+    /// is confirmed with a fetch, so a row deleted by another context, or a stale temporary
+    /// identifier from before a save, resolves to `nil` instead of to a placeholder.
+    ///
+    /// `ModelContext.model(for:)` is deliberately not used: it returns an instance for any
+    /// identifier of a known entity, whether or not the row exists, and reading a property of
+    /// that instance traps.
+    ///
     /// - Parameter objectID: The persistent identifier of the model to retrieve.
     /// - Returns: An optional instance of the specified persistent model,
     /// or `nil` if the model was not found.
@@ -53,10 +63,12 @@
     private func persistentModel<T>(withID objectID: PersistentIdentifier) throws -> T?
     where T: PersistentModel {
       if let registered: T = registeredModel(for: objectID) {
-        return registered
-      }
-      if let notRegistered: T = model(for: objectID) as? T {
-        return notRegistered
+        if registered.isDeleted {
+          return nil
+        }
+        if registered.hasChanges {
+          return registered
+        }
       }
 
       let fetchDescriptor = FetchDescriptor<T>(

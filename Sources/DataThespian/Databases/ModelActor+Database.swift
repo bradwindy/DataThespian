@@ -46,34 +46,5 @@ import Foundation
       let modelContext = self.modelContext
       return try closure(modelContext)
     }
-    /// Retrieves an optional persistent model from the data store and returns a transformed result.
-    /// - Parameters:
-    ///   - selector: A `Selector<PersistentModelType>.Get` instance
-    ///   that defines the criteria for retrieving the persistent model.
-    ///   - closure: A closure that performs some operation on
-    ///   the retrieved `PersistentModelType` instance (or `nil`)
-    ///   and returns a transformed result of type `U`.
-    /// - Returns: The transformed result of type `U`.
-    public func getOptional<PersistentModelType, U: Sendable>(
-      for selector: Selector<PersistentModelType>.Get,
-      with closure: @escaping @Sendable (PersistentModelType?) throws -> U
-    ) async throws -> U {
-      guard case .model(let model) = selector else {
-        return try await self.withModelContext {
-          try $0.getOptional(for: selector, with: closure)
-        }
-      }
-
-      let persistentIdentifier = model.persistentIdentifier
-      // return try closure(self[model.persistentIdentifier, as: PersistentModelType.self])
-
-      let fetchDescriptor = FetchDescriptor<PersistentModelType>(predicate: #Predicate{
-        $0.persistentModelID == persistentIdentifier
-      }, fetchLimit: 1)
-
-      return try await self.withModelContext { modelContext in
-        try closure(modelContext.fetch(fetchDescriptor).first)
-      }
-    }
   }
 #endif
