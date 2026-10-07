@@ -32,6 +32,10 @@
 
   extension Queryable {
     /// Inserts a new persistent model into the database
+    ///
+    /// The model is not saved, so the returned ``Model`` holds a temporary identifier. It
+    /// resolves until the next save and not after it. Use ``Database/insertAndSave(_:)`` when
+    /// you need a handle that outlives a save.
     /// - Parameter closure: A closure that creates and returns a new persistent model
     /// - Returns: A wrapped Model instance containing the inserted persistent model
     @discardableResult

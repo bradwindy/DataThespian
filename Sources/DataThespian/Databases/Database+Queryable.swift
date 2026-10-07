@@ -115,8 +115,9 @@
     /// Inserts a model unless one matching a selector already exists.
     ///
     /// See ``insertIf(_:notExist:with:)`` for the atomicity guarantee and how to build the
-    /// selector. The returned ``Model`` of a fresh insert holds a temporary identifier until
-    /// the next save.
+    /// selector. The returned ``Model`` of a fresh insert holds a temporary identifier that
+    /// stops resolving after the next save. Save, then look the model up again by its key,
+    /// when you need a handle that outlives the save.
     ///
     /// - Parameters:
     ///   - model: A closure that creates the model to insert.
@@ -131,6 +132,34 @@
     ) async throws -> Model<PersistentModelType> {
       try await self.insertIf(model, notExist: selector) { persistentModel in
         Model(persistentModel)
+      }
+    }
+
+    /// Inserts a model, saves, and returns a ``Model`` holding its permanent identifier.
+    ///
+    /// The ``Model`` returned by ``Queryable/insert(_:)`` is built before any save, so it holds
+    /// a temporary identifier that stops resolving once the context saves. This method saves
+    /// and reads the identifier in the same `withModelContext` call, so the result stays valid.
+    /// Saving also commits any other pending changes in the database's context.
+    ///
+    /// - Parameter closure: A closure that creates the model to insert.
+    /// - Returns: A ``Model`` that resolves after the save, from any context on the same store.
+    /// - Throws: Any error from saving. The model is then removed from the context again, and
+    ///   other pending changes are left as they were.
+    @discardableResult
+    public func insertAndSave<PersistentModelType: PersistentModel>(
+      _ closure: @Sendable @escaping () -> PersistentModelType
+    ) async throws -> Model<PersistentModelType> {
+      try await self.withModelContext { context in
+        let persistentModel = closure()
+        context.insert(persistentModel)
+        do {
+          try context.save()
+        } catch {
+          context.delete(persistentModel)
+          throw error
+        }
+        return Model(persistentModel)
       }
     }
 
