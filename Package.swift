@@ -28,8 +28,9 @@ let package = Package(
     )
   ],
   dependencies: [
-    // Bradley's fork, which carries the audit fixes (and requires a Sendable Category).
-    .package(url: "https://github.com/bradwindy/FelinePine.git", from: "2.0.0"),
+    // Bradley's fork, whose main branch carries the audit fixes (and requires a Sendable
+    // Category). It has no release tags above upstream's, so it is tracked by branch.
+    .package(url: "https://github.com/bradwindy/FelinePine.git", branch: "main"),
     .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0"),
   ],
   targets: [

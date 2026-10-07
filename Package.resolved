@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/bradwindy/FelinePine.git",
       "state" : {
-        "revision" : "3490ed309d5a7bd5d533becb919eaaa974f615af",
-        "version" : "2.0.0"
+        "branch" : "main",
+        "revision" : "3490ed309d5a7bd5d533becb919eaaa974f615af"
       }
     },
     {

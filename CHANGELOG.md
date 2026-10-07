@@ -2,7 +2,7 @@
 
 ## 2.0.0 (2026-10-07, bradwindy fork)
 
-Depends on the `bradwindy/FelinePine` fork, 2.0.0 or later.
+Depends on the `bradwindy/FelinePine` fork's `main` branch. Neither fork tags releases, so depend on this one by `branch: "main"`.
 
 ### Source-breaking
 
