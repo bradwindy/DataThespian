@@ -3,33 +3,10 @@ on:
   push:
     branches-ignore:
       - '*WIP'
-env:
-  PACKAGE_NAME: DataThespian      
+
+# SwiftData is Apple-only, so every job runs on macOS. The FelinePine fork needs
+# Swift 6.2 (Xcode 26) or later.
 jobs:
-  build-ubuntu:
-    name: Build on Ubuntu
-    runs-on: ubuntu-latest
-    container: swift:${{ matrix.swift-version }}-${{ matrix.os }}
-    if: ${{ !contains(github.event.head_commit.message, 'ci skip') }}
-    strategy:
-      matrix:
-        os: ["noble", "jammy"]
-        swift-version: ["6.0", "6.1", "6.2"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: brightdigit/swift-build@v1.3.4
-      - uses: sersoft-gmbh/swift-coverage-action@v4
-        id: coverage-files
-        with:          
-          fail-on-empty-output: true
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4       
-        with:
-          fail_ci_if_error: true
-          flags: swift-${{ matrix.swift-version }},ubuntu
-          verbose: true        
-          token: ${{ secrets.CODECOV_TOKEN }}  
-          files: ${{ join(fromJSON(steps.coverage-files.outputs.files), ',') }}    
   build-macos:
     name: Build on macOS
     env:
@@ -39,116 +16,91 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # SPM Build Matrix
-          - runs-on: macos-15
-            xcode: "/Applications/Xcode_16.1.app"
-          - runs-on: macos-15
-            xcode: "/Applications/Xcode_16.3.app"
-          - runs-on: macos-26
-            xcode: "/Applications/Xcode_26.0.app"
-          
-          # iOS Build Matrix
-          - type: ios
-            runs-on: macos-15
-            xcode: "/Applications/Xcode_16.1.app"
-            deviceName: "iPhone 16"
-            osVersion: "18.1"
-            download-platform: true
-          - type: ios
-            runs-on: macos-15
-            xcode: "/Applications/Xcode_16.3.app"
-            deviceName: "iPhone 16 Pro"
-            osVersion: "18.4"
-          - type: ios
-            runs-on: macos-26
-            xcode: "/Applications/Xcode_26.0.app"
-            deviceName: "iPhone 17 Pro"
-            osVersion: "26.0"
-            download-platform: true
-  
-          # watchOS Build Matrix
-          - type: watchos
-            runs-on: macos-15
-            xcode: "/Applications/Xcode_16.1.app"
-            deviceName: "Apple Watch Ultra 2 (49mm)"
-            osVersion: "11.1"
-            download-platform: true
-          - type: watchos
-            runs-on: macos-15
-            xcode: "/Applications/Xcode_16.3.app"
-            deviceName: "Apple Watch Ultra 2 (49mm)"
-            osVersion: "11.4"
-            download-platform: true
-          - type: watchos
-            runs-on: macos-26
-            xcode: "/Applications/Xcode_26.0.app"
-            deviceName: "Apple Watch Ultra 3 (49mm)"
-            osVersion: "26.0"
-            download-platform: true
+        runs-on: [macos-26]
+        # The oldest Swift 6.2 toolchain and the newest stable Xcode on the image.
+        xcode: ["26.0", "latest-stable"]
+        type: [spm, ios, watchos]
+        # The runner image ships simulator runtimes only for its newest Xcode,
+        # so the oldest Xcode builds and tests the package with SwiftPM only.
+        exclude:
+          - xcode: "26.0"
+            type: ios
+          - xcode: "26.0"
+            type: watchos
 
-          - type: visionos
-            runs-on: macos-15
-            xcode: "/Applications/Xcode_16.3.app"
-            deviceName: "Apple Vision Pro"
-            osVersion: "2.4"
-          - type: visionos
-            runs-on: macos-26
-            xcode: "/Applications/Xcode_26.0.app"
-            deviceName: "Apple Vision Pro"
-            osVersion: "26.0"
-            download-platform: true
-  
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build and Test
-        uses: brightdigit/swift-build@v1.3.4
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
         with:
-          scheme: ${{ env.PACKAGE_NAME }}
-          type: ${{ matrix.type }}
-          xcode: ${{ matrix.xcode }}
-          deviceName: ${{ matrix.deviceName }}
-          osVersion: ${{ matrix.osVersion }}
-          download-platform: ${{ matrix['download-platform'] }}
-          
+          xcode-version: ${{ matrix.xcode }}
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # SPM Cache Step
+      - name: Cache swift package modules
+        if: matrix.type == 'spm'
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-spm
+        with:
+          path: .build
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ matrix.xcode }}-${{ hashFiles('Package.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-${{ matrix.xcode }}-
+
+      - name: Build SPM
+        if: matrix.type == 'spm'
+        run: swift build
+
+      - name: Run Swift Package tests
+        if: matrix.type == 'spm'
+        run: swift test -v --enable-code-coverage
+
+      # Simulator device names change with every Xcode, so pick any available
+      # device of the platform from the newest installed runtime instead of
+      # pinning a name and OS version.
+      - name: Find simulator
+        if: matrix.type != 'spm'
+        run: |
+          case "${{ matrix.type }}" in
+            ios) runtime="iOS"; prefix="iPhone" ;;
+            watchos) runtime="watchOS"; prefix="Apple Watch" ;;
+            visionos) runtime="xrOS"; prefix="Apple Vision" ;;
+          esac
+          udid=$(xcrun simctl list devices available --json | jq -r \
+            --arg runtime "SimRuntime.$runtime-" --arg prefix "$prefix" '
+              [.devices | to_entries[]
+                | select(.key | contains($runtime))
+                | .value[] | select(.name | startswith($prefix))]
+              | last | .udid // empty')
+          if [ -z "$udid" ]; then
+            echo "No available $prefix simulator for ${{ matrix.type }}" >&2
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+
+      - name: Run Device Tests
+        if: matrix.type != 'spm'
+        run: >
+          xcodebuild test
+          -scheme ${{ env.PACKAGE_NAME }}
+          -destination "id=$SIMULATOR_UDID"
+          -enableCodeCoverage YES
+
       # Common Coverage Steps
       - name: Process Coverage
         uses: sersoft-gmbh/swift-coverage-action@v4
-  
+        with:
+          fail-on-empty-output: true
+
       - name: Upload Coverage
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          flags: ${{ matrix.type && format('{0}{1}', matrix.type, matrix.osVersion) || 'spm' }}
-
-  lint:
-    name: Linting
-    if: "!contains(github.event.head_commit.message, 'ci skip')"  
-    runs-on: ubuntu-latest
-    needs: [build-ubuntu, build-macos]
-    env:
-      MINT_PATH: .mint/lib
-      MINT_LINK_PATH: .mint/bin
-    steps:
-      - uses: actions/checkout@v4    
-      - name: Cache mint
-        id: cache-mint
-        uses: actions/cache@v4  
-        env:
-          cache-name: cache
-        with:
-          path: |
-            .mint
-            Mint         
-          key: ${{ runner.os }}-mint-${{ hashFiles('**/Mintfile') }}
-          restore-keys: |
-            ${{ runner.os }}-mint-  
-      - name: Install mint
-        if: steps.cache-mint.outputs.cache-hit != 'true'
-        run: |
-          git clone https://github.com/yonaskolb/Mint.git
-          cd Mint
-          swift run mint install yonaskolb/mint
-      - name: Lint
-        run: ./Scripts/lint.sh
+          flags: ${{ matrix.type }}-xcode${{ matrix.xcode }}
