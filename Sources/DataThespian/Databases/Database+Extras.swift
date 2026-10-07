@@ -34,13 +34,25 @@
   extension Database {
     /// Executes a database transaction asynchronously.
     ///
+    /// The block's changes are saved when it returns. If the block or the save throws, the
+    /// context is rolled back so the partial changes cannot be committed by a later `save()`.
+    /// The rollback discards every unsaved change in the database's context, including changes
+    /// made before the transaction started, not only the block's own.
+    ///
     /// - Parameter block: A closure that performs database operations within the transaction.
     /// - Throws: Any errors that occur during the transaction.
     public func transaction(_ block: @Sendable @escaping (ModelContext) throws -> Void) async throws
     {
       try await self.withModelContext { context in
-        try context.transaction {
-          try block(context)
+        do {
+          try context.transaction {
+            try block(context)
+          }
+        } catch {
+          // ModelContext.transaction(block:) saves but never rolls back. Without this the
+          // block's partial changes stay pending in the long-lived context.
+          context.rollback()
+          throw error
         }
       }
     }
@@ -49,7 +61,8 @@
     ///
     /// - Parameter types: An array of `PersistentModel.Type` instances
     /// representing the model types to delete.
-    /// - Throws: Any errors that occur during the deletion process.
+    /// - Throws: Any errors that occur during the deletion process. On failure the context is
+    ///   rolled back, as described in ``transaction(_:)``.
     public func deleteAll(of types: [any PersistentModel.Type]) async throws {
       try await self.transaction { context in
         for type in types {
