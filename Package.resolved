@@ -4,7 +4,7 @@
     {
       "identity" : "felinepine",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/brightdigit/FelinePine.git",
+      "location" : "https://github.com/bradwindy/FelinePine.git",
       "state" : {
         "revision" : "54c727e0b069ffda7f80db7af99bfab2518e0780",
         "version" : "1.0.0-beta.2"

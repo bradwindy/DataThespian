@@ -36,7 +36,7 @@ internal protocol Loggable: FelinePine.Loggable where Self.LoggingSystemType == 
 @_documentation(visibility: internal)
 public enum ThespianLogging: LoggingSystem {
   /// Represents the different logging categories used in the `ThespianLogging` system.
-  public enum Category: String, CaseIterable {
+  public enum Category: String, CaseIterable, Sendable {
     /// Logs related to the application.
     case application
     /// Logs related to data.
