@@ -121,8 +121,7 @@ internal class ContentObject {
       try await database.withModelContext { modelContext in
         let item = try modelContext.get(item.model)
         let child = try modelContext.get(childModel)
-        assert(child != nil && item != nil)
-        child?.parent = item
+        child.parent = item
         try modelContext.save()
       }
     }
@@ -133,17 +132,10 @@ internal class ContentObject {
       return
     }
     Task {
-      let insertedModel = await database.insert { Item(timestamp: date) }
-      print("inserted:", insertedModel.isTemporary)
-      try await database.save()
-      let savedModel = try await database.get(
-        for: .predicate(
-          #Predicate<Item> {
-            $0.timestamp == date
-          }
-        )
-      )
-      print("saved:", savedModel.isTemporary)
+      // insertAndSave returns a Model with the permanent identifier, which still
+      // resolves after the save; the Model from insert(_:) would not.
+      let savedModel = try await database.insertAndSave { Item(timestamp: date) }
+      print("saved:", savedModel.persistentIdentifier)
     }
   }
 }
