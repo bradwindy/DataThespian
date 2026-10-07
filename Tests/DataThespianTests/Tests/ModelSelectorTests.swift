@@ -63,6 +63,19 @@ internal struct ModelSelectorTests {
     }
 
     @Test(arguments: DatabaseKind.allCases)
+    internal func updateByModelIsSaved(kind: DatabaseKind) async throws {
+      let container = try DatabaseKind.makeContainer(for: Parent.self, Child.self)
+      let database = kind.makeDatabase(modelContainer: container)
+      let model = try await database.insertAndSave { Parent(id: UUID()) }
+
+      try await database.update(for: .model(model)) { $0.name = "updated" }
+      try await database.save()
+
+      let names = try ModelContext(container).fetch(FetchDescriptor<Parent>()).map(\.name)
+      #expect(names == ["updated"])
+    }
+
+    @Test(arguments: DatabaseKind.allCases)
     internal func modelDeletedInSameContextResolvesToNil(kind: DatabaseKind) async throws {
       let container = try DatabaseKind.makeContainer(for: Parent.self, Child.self)
       let database = kind.makeDatabase(modelContainer: container)
