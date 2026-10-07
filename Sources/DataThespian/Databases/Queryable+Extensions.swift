@@ -66,36 +66,31 @@
     }
 
     /// Fetches and transforms multiple models using an array of selectors
+    ///
+    /// Results follow the order of `selectors`. A selector that matches nothing is left out,
+    /// the same as `ModelContext.fetch(for:)` with an array of selectors.
     /// - Parameters:
     ///   - selectors: An array of selectors to fetch models
     ///   - closure: A transformation closure to apply to each fetched model
-    /// - Returns: An array of transformed results
+    /// - Returns: An array of transformed results, in selector order
     /// - Throws: Any error thrown by `closure`, and any SwiftData error from a fetch.
     public func fetch<PersistentModelType, U: Sendable>(
       for selectors: [Selector<PersistentModelType>.Get],
       with closure: @escaping @Sendable (PersistentModelType) throws -> U
     ) async throws -> [U] {
-      try await withThrowingTaskGroup(
-        of: Optional<U>.self,
-        returning: [U].self,
-        body: { group in
-          for selector in selectors {
-            group.addTask {
-              try await self.getOptional(for: selector) { persistentModel in
-                guard let persistentModel else {
-                  return Optional<U>.none
-                }
-                return try closure(persistentModel)
-              }
-            }
-          }
-          return try await group.reduce(into: [U]()) { partialResult, result in
-            if let result {
-              partialResult.append(result)
-            }
-          }
+      // Every lookup runs on the same database actor, so a task group adds no parallelism
+      // and returns results in completion order. Await them in input order instead.
+      var results = [U]()
+      results.reserveCapacity(selectors.count)
+      for selector in selectors {
+        let result: U? = try await self.getOptional(for: selector) { persistentModel in
+          try persistentModel.map(closure)
         }
-      )
+        if let result {
+          results.append(result)
+        }
+      }
+      return results
     }
 
     /// Retrieves a required model matching the given selector
