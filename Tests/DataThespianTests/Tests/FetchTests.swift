@@ -7,145 +7,119 @@ import Testing
   import SwiftData
 #endif
 
+/// Each case covers a different `Queryable` path, on every `Database` implementation.
 @Suite(.enabled(if: swiftDataIsAvailable()))
 internal struct FetchTests {
-  @Test internal func testFetchAll() async throws {
-    #if canImport(SwiftData)
-      let database = try TestingDatabase(for: Parent.self, Child.self)
-      let parentIDs = [UUID(), UUID(), UUID()]
-
-      // Insert multiple parents
+  #if canImport(SwiftData)
+    private static func makeDatabase(
+      _ kind: DatabaseKind, names: [String] = []
+    ) async throws -> (any Database, [UUID]) {
+      let container = try DatabaseKind.makeContainer(for: Parent.self, Child.self)
+      let database = kind.makeDatabase(modelContainer: container)
+      let ids = names.map { _ in UUID() }
+      let seeds = Array(zip(ids, names))
       try await database.withModelContext { context in
-        for id in parentIDs {
-          context.insert(Parent(id: id))
+        for (id, name) in seeds {
+          let parent = Parent(id: id)
+          parent.name = name
+          context.insert(parent)
         }
         try context.save()
       }
+      return (database, ids)
+    }
 
-      // Fetch all parents
+    @Test(arguments: DatabaseKind.allCases)
+    internal func testFetchAll(kind: DatabaseKind) async throws {
+      let (database, parentIDs) = try await Self.makeDatabase(kind, names: ["a", "b", "c"])
+
       let fetchedIDs = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.map(\.id)
       }
 
       #expect(fetchedIDs.sorted() == parentIDs.sorted())
-    #endif
-  }
+    }
 
-  @Test internal func testFetchByID() async throws {
-    #if canImport(SwiftData)
-      let database = try TestingDatabase(for: Parent.self, Child.self)
-      let parentID = UUID()
+    @Test(arguments: DatabaseKind.allCases)
+    internal func testFetchByPredicate(kind: DatabaseKind) async throws {
+      let (database, parentIDs) = try await Self.makeDatabase(kind, names: ["a", "b"])
+      let parentID = parentIDs[1]
 
-      // Insert a parent
-      try await database.withModelContext { context in
-        context.insert(Parent(id: parentID))
-        try context.save()
-      }
-
-      // Fetch by ID
-      let fetchedID = try await database.getOptional(
+      let fetchedName = try await database.getOptional(
         for: .predicate(#Predicate<Parent> { $0.id == parentID })
       ) { parent in
-        parent?.id
+        parent?.name
       }
 
-      #expect(fetchedID == parentID)
-    #endif
-  }
+      #expect(fetchedName == "b")
+    }
 
-  @Test internal func testFetchByIDs() async throws {
-    #if canImport(SwiftData)
-      let database = try TestingDatabase(for: Parent.self, Child.self)
-      let parentIDs = [UUID(), UUID(), UUID()]
+    @Test(arguments: DatabaseKind.allCases)
+    internal func testFetchMissingIDReturnsNil(kind: DatabaseKind) async throws {
+      let (database, _) = try await Self.makeDatabase(kind, names: ["a"])
+      let missingID = UUID()
 
-      // Insert multiple parents
-      try await database.withModelContext { context in
-        for id in parentIDs {
-          context.insert(Parent(id: id))
-        }
-        try context.save()
-      }
+      let fetched = try await database.getOptional(
+        for: .predicate(#Predicate<Parent> { $0.id == missingID })
+      )
 
-      // Fetch by IDs
+      #expect(fetched == nil)
+    }
+
+    @Test(arguments: DatabaseKind.allCases)
+    internal func testFetchByIDs(kind: DatabaseKind) async throws {
+      let (database, parentIDs) = try await Self.makeDatabase(kind, names: ["a", "b", "c", "d"])
+      let wanted = Array(parentIDs.prefix(3))
+
       let fetchedIDs = try await database.fetch(
-        for: .descriptor(predicate: #Predicate<Parent> { parentIDs.contains($0.id) })
+        for: .descriptor(predicate: #Predicate<Parent> { wanted.contains($0.id) })
       ) { parents in
         parents.map(\.id)
       }
 
-      #expect(fetchedIDs.sorted() == parentIDs.sorted())
-    #endif
-  }
+      #expect(fetchedIDs.sorted() == wanted.sorted())
+    }
 
-  @Test internal func testFetchByPredicate() async throws {
-    #if canImport(SwiftData)
-      let database = try TestingDatabase(for: Parent.self, Child.self)
-      let parentID = UUID()
+    @Test(arguments: DatabaseKind.allCases)
+    internal func testFetchSortedWithLimit(kind: DatabaseKind) async throws {
+      let (database, _) = try await Self.makeDatabase(kind, names: ["c", "a", "d", "b"])
 
-      // Insert a parent
-      try await database.withModelContext { context in
-        context.insert(Parent(id: parentID))
-        try context.save()
-      }
-
-      // Fetch by predicate
-      let fetchedID = try await database.getOptional(
-        for: .predicate(
-          #Predicate<Parent> { parent in
-            parent.id == parentID
-          }
-        )
-      ) { parent in
-        parent?.id
-      }
-
-      #expect(fetchedID == parentID)
-    #endif
-  }
-
-  @Test internal func testFetchByValue() async throws {
-    #if canImport(SwiftData)
-      let database = try TestingDatabase(for: Parent.self, Child.self)
-      let parentID = UUID()
-
-      // Insert a parent
-      try await database.withModelContext { context in
-        context.insert(Parent(id: parentID))
-        try context.save()
-      }
-
-      // Fetch by value
-      let fetchedID = try await database.getOptional(
-        for: .predicate(#Predicate<Parent> { $0.id == parentID })
-      ) { parent in
-        parent?.id
-      }
-
-      #expect(fetchedID == parentID)
-    #endif
-  }
-
-  @Test internal func testFetchByValues() async throws {
-    #if canImport(SwiftData)
-      let database = try TestingDatabase(for: Parent.self, Child.self)
-      let parentIDs = [UUID(), UUID(), UUID()]
-
-      // Insert multiple parents
-      try await database.withModelContext { context in
-        for id in parentIDs {
-          context.insert(Parent(id: id))
-        }
-        try context.save()
-      }
-
-      // Fetch by values
-      let fetchedIDs = try await database.fetch(
-        for: .descriptor(predicate: #Predicate<Parent> { parentIDs.contains($0.id) })
+      let names = try await database.fetch(
+        for: .descriptor(sortBy: [SortDescriptor(\Parent.name)], fetchLimit: 2)
       ) { parents in
-        parents.map(\.id)
+        parents.map(\.name)
       }
 
-      #expect(fetchedIDs.sorted() == parentIDs.sorted())
-    #endif
-  }
+      #expect(names == ["a", "b"])
+    }
+
+    @Test(arguments: DatabaseKind.allCases)
+    internal func testUpdateByPredicateIsSaved(kind: DatabaseKind) async throws {
+      let (database, parentIDs) = try await Self.makeDatabase(kind, names: ["before"])
+      let parentID = parentIDs[0]
+
+      try await database.update(for: .predicate(#Predicate<Parent> { $0.id == parentID })) {
+        $0.name = "after"
+      }
+      try await database.save()
+
+      let names = try await database.fetch(for: .all(Parent.self)) { $0.map(\.name) }
+      #expect(names == ["after"])
+    }
+
+    @Test(arguments: DatabaseKind.allCases)
+    internal func testUpdateListUpdatesEveryMatch(kind: DatabaseKind) async throws {
+      let (database, _) = try await Self.makeDatabase(kind, names: ["a", "b", "c"])
+
+      try await database.update(for: .all(Parent.self)) { parents in
+        for parent in parents {
+          parent.name = "renamed"
+        }
+      }
+      try await database.save()
+
+      let names = try await database.fetch(for: .all(Parent.self)) { $0.map(\.name) }
+      #expect(names == ["renamed", "renamed", "renamed"])
+    }
+  #endif
 }

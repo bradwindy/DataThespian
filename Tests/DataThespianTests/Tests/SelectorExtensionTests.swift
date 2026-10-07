@@ -12,7 +12,7 @@ internal struct SelectorExtensionTests {
   @Test internal func testSelectorDeleteAllType() async throws {
     #if canImport(SwiftData)
       // Test that the .all(Type) extension method returns .all
-      let selector = Selector<Parent>.Delete.all(Parent.self)
+      let selector = DataThespian.Selector<Parent>.Delete.all(Parent.self)
 
       // Use pattern matching to verify the case
       switch selector {
@@ -26,14 +26,24 @@ internal struct SelectorExtensionTests {
     #endif
   }
 
-  @Test internal func testSelectorDeleteAllTypeUsage() async throws {
-    #if canImport(SwiftData)
-      let database = try TestingDatabase(for: Parent.self, Child.self)
+  #if canImport(SwiftData)
+    /// Used to end with `#expect(true)` on an empty store, so it could not fail.
+    @Test(arguments: DatabaseKind.allCases)
+    internal func testSelectorDeleteAllTypeUsage(kind: DatabaseKind) async throws {
+      let container = try DatabaseKind.makeContainer(for: Parent.self, Child.self)
+      let database = kind.makeDatabase(modelContainer: container)
+      try await database.withModelContext { context in
+        for _ in 0..<3 {
+          context.insert(Parent(id: UUID()))
+        }
+        try context.save()
+      }
 
-      // Verify we can call the method without error
-      // This is mainly checking that the method signature is correct
       try await database.delete(.all(Parent.self))
-      #expect(true, "Should be able to call delete with .all(Type)")
-    #endif
-  }
+      try await database.save()
+
+      let remaining = try ModelContext(container).fetchCount(FetchDescriptor<Parent>())
+      #expect(remaining == 0)
+    }
+  #endif
 }
