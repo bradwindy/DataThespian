@@ -81,6 +81,59 @@
       }
     }
 
+    /// Inserts a model unless one matching a selector already exists, then transforms the
+    /// existing or inserted model.
+    ///
+    /// The factory is called exactly once, on the database's context. The existence check, the
+    /// insert and the transform run in one `withModelContext` call, so concurrent `insertIf`
+    /// calls on the same database cannot both insert. The check sees unsaved inserts in this
+    /// context. Other contexts or processes writing the same store can still race; only a
+    /// unique constraint (`@Attribute(.unique)` or `#Unique`) prevents duplicates there.
+    ///
+    /// Build the selector from stable key values, for example
+    /// `.predicate(#Predicate { $0.key == key })`. A `.model(Model(candidate))` selector never
+    /// matches, because the candidate has not been inserted.
+    ///
+    /// - Parameters:
+    ///   - model: A closure that creates the model to insert.
+    ///   - selector: A closure that creates a selector from the candidate model.
+    ///   - closure: A transformation closure applied to the existing or inserted model.
+    /// - Returns: The transformed result.
+    /// - Throws: Any error thrown by `closure`, and any SwiftData error from the existence
+    ///   check. A failed check never falls through to an insert.
+    public func insertIf<PersistentModelType, U: Sendable>(
+      _ model: @Sendable @escaping () -> PersistentModelType,
+      notExist selector: @Sendable @escaping (PersistentModelType) ->
+        Selector<PersistentModelType>.Get,
+      with closure: @escaping @Sendable (PersistentModelType) throws -> U
+    ) async throws -> U {
+      try await self.withModelContext { context in
+        try context.insertIf(model, notExist: selector, with: closure)
+      }
+    }
+
+    /// Inserts a model unless one matching a selector already exists.
+    ///
+    /// See ``insertIf(_:notExist:with:)`` for the atomicity guarantee and how to build the
+    /// selector. The returned ``Model`` of a fresh insert holds a temporary identifier until
+    /// the next save.
+    ///
+    /// - Parameters:
+    ///   - model: A closure that creates the model to insert.
+    ///   - selector: A closure that creates a selector from the candidate model.
+    /// - Returns: Either the existing model or the newly inserted model.
+    /// - Throws: Any SwiftData error from the existence check.
+    @discardableResult
+    public func insertIf<PersistentModelType>(
+      _ model: @Sendable @escaping () -> PersistentModelType,
+      notExist selector: @Sendable @escaping (PersistentModelType) ->
+        Selector<PersistentModelType>.Get
+    ) async throws -> Model<PersistentModelType> {
+      try await self.insertIf(model, notExist: selector) { persistentModel in
+        Model(persistentModel)
+      }
+    }
+
     /// Deletes a persistent model from the database.
     /// - Parameter selector: A selector that specifies the model to delete.
     /// - Throws: Any errors that occur during the delete operation.

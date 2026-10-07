@@ -46,6 +46,32 @@
       return try closure(persistentModel)
     }
 
+    /// Inserts a model unless one matching a selector already exists, then transforms the
+    /// existing or inserted model.
+    ///
+    /// The factory is called exactly once. When a match exists the candidate is discarded
+    /// without being inserted. The check includes this context's unsaved inserts.
+    ///
+    /// - Parameters:
+    ///   - model: A closure that creates the candidate model.
+    ///   - selector: A closure that creates a selector from the candidate model. Use a
+    ///     `.predicate` on stable key values; a `.model` selector for the candidate never matches.
+    ///   - closure: A transformation closure applied to the existing or inserted model.
+    /// - Returns: The transformed result.
+    /// - Throws: Any error thrown by `closure`, and any SwiftData error from the existence check.
+    public func insertIf<PersistentModelType: PersistentModel, U>(
+      _ model: () -> PersistentModelType,
+      notExist selector: (PersistentModelType) -> Selector<PersistentModelType>.Get,
+      with closure: (PersistentModelType) throws -> U
+    ) throws -> U {
+      let candidate = model()
+      if let existing = try self.getOptional(for: selector(candidate)) {
+        return try closure(existing)
+      }
+      self.insert(candidate)
+      return try closure(candidate)
+    }
+
     /// Retrieves an optional persistent model based on a selector.
     ///
     /// - Parameter selector: A selector that specifies the criteria for retrieving the persistent model.

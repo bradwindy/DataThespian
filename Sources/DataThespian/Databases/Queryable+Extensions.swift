@@ -149,46 +149,6 @@
     ) async throws {
       try await self.fetch(for: selector, with: closure)
     }
-
-    /// Inserts a model if it doesn't already exist based on a selector
-    /// - Parameters:
-    ///   - model: A closure that creates the model to insert
-    ///   - selector: A closure that creates a selector from the model to check existence
-    /// - Returns: Either the existing model or the newly inserted model
-    /// - Throws: Any SwiftData error from the existence check. A failed check never falls
-    ///   through to an insert.
-    public func insertIf<PersistentModelType>(
-      _ model: @Sendable @escaping () -> PersistentModelType,
-      notExist selector: @Sendable @escaping (PersistentModelType) ->
-        Selector<PersistentModelType>.Get
-    ) async throws -> Model<PersistentModelType> {
-      let persistentModel = model()
-      let selector = selector(persistentModel)
-      let modelOptional = try await self.getOptional(for: selector)
-
-      if let modelOptional {
-        return modelOptional
-      } else {
-        return await self.insert(model)
-      }
-    }
-
-    /// Inserts a model if it doesn't exist and transforms it
-    /// - Parameters:
-    ///   - model: A closure that creates the model to insert
-    ///   - selector: A closure that creates a selector from the model to check existence
-    ///   - closure: A transformation closure to apply to the resulting model
-    /// - Returns: The transformed result
-    /// - Throws: Rethrows any errors from the transformation closure
-    public func insertIf<PersistentModelType, U: Sendable>(
-      _ model: @Sendable @escaping () -> PersistentModelType,
-      notExist selector: @Sendable @escaping (PersistentModelType) ->
-        Selector<PersistentModelType>.Get,
-      with closure: @escaping @Sendable (PersistentModelType) throws -> U
-    ) async throws -> U {
-      let model = try await self.insertIf(model, notExist: selector)
-      return try await self.get(for: .model(model), with: closure)
-    }
   }
 
   extension Queryable {
