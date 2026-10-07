@@ -29,10 +29,6 @@
 
 #if canImport(SwiftData)
   public import SwiftData
-  private struct SynchronizationUpdate<PersistentModelType: PersistentModel, DataType: Sendable> {
-    var file: DataType?
-    var entry: PersistentModelType?
-  }
   /// A protocol that defines the synchronization behavior between a persistent model and data.
   public protocol CollectionSynchronizer {
     /// The type of the persistent model.
@@ -74,56 +70,84 @@
   extension CollectionSynchronizer {
     /// Synchronizes the difference between a collection of persistent models and a collection of data.
     ///
+    /// Every delete and update target is resolved before the context is changed, so a missing
+    /// update target throws without leaving deletes or inserts behind. A delete target that no
+    /// longer exists is skipped. Update targets come from
+    /// ``CollectionDifference/modelsToUpdate`` when it is set, and otherwise from
+    /// ``getSelector(from:)``. Updates are applied in the order of
+    /// ``CollectionDifference/updates``, then the inserts are made.
+    ///
+    /// If `synchronize(_:with:)` throws and the context had no unsaved changes on entry, the
+    /// context is rolled back, so nothing from this call can be committed by a later save. If it
+    /// already had unsaved changes, they are kept, and so are the changes this call made before
+    /// the error; roll back or discard them yourself. On success the caller must save.
+    ///
     /// - Parameters:
     ///   - difference: The difference between the persistent models and the data.
     ///   - modelContext: The model context to use for the synchronization.
     /// - Returns: The list of persistent models that were inserted.
-    /// - Throws: Any errors that occur during the synchronization process.
+    /// - Throws: `QueryError.itemNotFound` when an update target cannot be found,
+    ///   ``SynchronizationError/keyMismatch(expected:found:)`` when `getSelector(from:)` finds a
+    ///   model with a different key, and any error from `synchronize(_:with:)`.
     public static func synchronizeDifference(
       _ difference: CollectionDifference<PersistentModelType, DataType>,
       using modelContext: ModelContext
     ) throws -> [PersistentModelType] {
-      try modelContext.delete(difference.deleteSelectors)
+      let wasClean = !modelContext.hasChanges
 
-      let modelsToInsert: [Model<PersistentModelType>] = difference.inserts.map { model in
-        modelContext.insert {
-          Self.persistentModel(from: model)
+      let entriesToDelete = try difference.modelsToDelete.compactMap { model in
+        try modelContext.getOptional(model)
+      }
+      let entriesToUpdate = try Self.updateTargets(for: difference, using: modelContext)
+
+      do {
+        for entry in entriesToDelete {
+          modelContext.delete(entry)
+        }
+
+        for (entry, data) in entriesToUpdate {
+          try Self.synchronize(entry, with: data)
+        }
+
+        return difference.inserts.map { data in
+          let persistentModel = Self.persistentModel(from: data)
+          modelContext.insert(persistentModel)
+          return persistentModel
+        }
+      } catch {
+        if wasClean {
+          modelContext.rollback()
+        }
+        throw error
+      }
+    }
+
+    private static func updateTargets(
+      for difference: CollectionDifference<PersistentModelType, DataType>,
+      using modelContext: ModelContext
+    ) throws -> [(PersistentModelType, DataType)] {
+      if let models = difference.modelsToUpdate, models.count == difference.updates.count {
+        return try zip(models, difference.updates).map { pair in
+          let entry = try modelContext.get(pair.0)
+          return (entry, pair.1)
         }
       }
 
-      let inserted = try modelsToInsert.map {
-        try modelContext.get($0)
-      }
-
-      let updateSelectors = difference.updates.map {
-        Self.getSelector(from: $0)
-      }
-
-      let entriesToUpdate = try modelContext.fetch(for: updateSelectors)
-
-      var dictionary = [ID: SynchronizationUpdate<PersistentModelType, DataType>]()
-
-      for file in difference.updates {
-        let id = file[keyPath: Self.dataKey]
-        assert(dictionary[id] == nil)
-        dictionary[id] = SynchronizationUpdate(file: file)
-      }
-
-      for entry in entriesToUpdate {
-        let id = entry[keyPath: Self.persistentModelKey]
-        assert(dictionary[id] != nil)
-        dictionary[id]?.entry = entry
-      }
-
-      for update in dictionary.values {
-        guard let entry = update.entry, let file = update.file else {
-          assertionFailure()
-          continue
+      return try difference.updates.map { data in
+        let selector = Self.getSelector(from: data)
+        guard let entry = try modelContext.getOptional(for: selector) else {
+          throw QueryError<PersistentModelType>.itemNotFound(selector)
         }
-        try Self.synchronize(entry, with: file)
+        let expected = data[keyPath: Self.dataKey]
+        let found = entry[keyPath: Self.persistentModelKey]
+        guard expected == found else {
+          throw SynchronizationError.keyMismatch(
+            expected: String(describing: expected),
+            found: String(describing: found)
+          )
+        }
+        return (entry, data)
       }
-
-      return inserted
     }
   }
 #endif

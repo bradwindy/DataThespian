@@ -39,6 +39,14 @@
     public let modelsToDelete: [Model<PersistentModelType>]
     /// The items that need to be updated.
     public let updates: [DataType]
+    /// The persistent model each item in ``updates`` updates, at the same index.
+    ///
+    /// Set by ``init(persistentModels:data:persistentModelKeyPath:dataKeyPath:)`` and
+    /// ``init(inserts:modelsToDelete:updates:modelsToUpdate:)``. When it is `nil`,
+    /// `CollectionSynchronizer.synchronizeDifference(_:using:)` finds each target through
+    /// `getSelector(from:)` instead. The models are identified by `PersistentIdentifier`, so
+    /// build the difference from saved models, or apply it in the context the models came from.
+    public let modelsToUpdate: [Model<PersistentModelType>]?
 
     /// Initializes a `CollectionDifference` instance with
     /// the specified inserts, models to delete, and updates.
@@ -52,6 +60,27 @@
       self.inserts = inserts
       self.modelsToDelete = modelsToDelete
       self.updates = updates
+      self.modelsToUpdate = nil
+    }
+
+    /// Initializes a `CollectionDifference` instance with
+    /// the specified inserts, models to delete, updates and the models they update.
+    /// - Parameters:
+    ///   - inserts: The items that need to be inserted.
+    ///   - modelsToDelete: The models that need to be deleted.
+    ///   - updates: The items that need to be updated.
+    ///   - modelsToUpdate: The model each item in `updates` updates, at the same index.
+    ///     If the counts differ the synchronizer ignores it and uses `getSelector(from:)`.
+    public init(
+      inserts: [DataType],
+      modelsToDelete: [Model<PersistentModelType>],
+      updates: [DataType],
+      modelsToUpdate: [Model<PersistentModelType>]
+    ) {
+      self.inserts = inserts
+      self.modelsToDelete = modelsToDelete
+      self.updates = updates
+      self.modelsToUpdate = modelsToUpdate
     }
   }
 
@@ -73,7 +102,8 @@
     ///   first appears.
     ///
     /// ``inserts`` and ``updates`` follow the order of `data`, and ``modelsToDelete`` follows
-    /// the order of `persistentModels`.
+    /// the order of `persistentModels`. ``modelsToUpdate`` records the model each update
+    /// applies to, so the synchronizer updates exactly the rows that were compared.
     ///
     /// - Parameters:
     ///   - persistentModels: The persistent models to compare.
@@ -109,14 +139,17 @@
       }
 
       let inserts = dataOrder.filter { entryMap[$0] == nil }.compactMap { dataMap[$0] }
-      let updates = dataOrder.filter { entryMap[$0] != nil }.compactMap { dataMap[$0] }
+      let updateIDs = dataOrder.filter { entryMap[$0] != nil }
+      let updates = updateIDs.compactMap { dataMap[$0] }
+      let entriesToUpdate = updateIDs.compactMap { entryMap[$0] }
       let entriesToDelete =
         entryOrder.filter { dataMap[$0] == nil }.compactMap { entryMap[$0] } + duplicateEntries
 
       self.init(
         inserts: inserts,
         modelsToDelete: entriesToDelete.map(Model.init),
-        updates: updates
+        updates: updates,
+        modelsToUpdate: entriesToUpdate.map(Model.init)
       )
     }
   }
