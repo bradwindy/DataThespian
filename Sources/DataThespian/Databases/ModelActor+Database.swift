@@ -28,11 +28,15 @@
 //
 
 #if canImport(SwiftData)
-import Foundation
   public import SwiftData
 
   extension ModelActor where Self: Database {
-    /// A Boolean value indicating whether the current thread is the background thread.
+    /// Has no effect.
+    ///
+    /// This was meant to enable a thread check in `withModelContext`, but it was not a
+    /// protocol requirement, so a conformer's own value was never read, and the check asserted
+    /// the opposite of its name. The check is removed.
+    @available(*, deprecated, message: "Has no effect.")
     public static var assertIsBackground: Bool { false }
 
     /// Executes a closure within the context of the model.
@@ -42,7 +46,6 @@ import Foundation
     public func withModelContext<T: Sendable>(
       _ closure: @Sendable @escaping (ModelContext) throws -> T
     ) async rethrows -> T {
-      assert(isMainThread: true, if: Self.assertIsBackground)
       let modelContext = self.modelContext
       return try closure(modelContext)
     }

@@ -29,15 +29,6 @@
 
 public import Foundation
 
-/// Asserts that the current thread is the main thread if the `assertIsBackground` parameter is `true`.
-///
-/// - Parameters:
-///   - isMainThread: A boolean indicating whether the current thread should be the main thread.
-///   - assertIsBackground: A boolean indicating whether the assertion should be made.
-@inlinable internal func assert(isMainThread: Bool, if assertIsBackground: Bool) {
-  assert(!assertIsBackground || isMainThread == Thread.isMainThread)
-}
-
 /// Asserts that the current thread is the main thread.
 ///
 /// - Parameter isMainThread: A boolean indicating whether the current thread should be the main thread.
