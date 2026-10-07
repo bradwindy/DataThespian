@@ -23,7 +23,7 @@ internal struct FetchTests {
       }
 
       // Fetch all parents
-      let fetchedIDs = await database.fetch(for: .all(Parent.self)) { parents in
+      let fetchedIDs = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.map(\.id)
       }
 
@@ -43,7 +43,7 @@ internal struct FetchTests {
       }
 
       // Fetch by ID
-      let fetchedID = await database.getOptional(
+      let fetchedID = try await database.getOptional(
         for: .predicate(#Predicate<Parent> { $0.id == parentID })
       ) { parent in
         parent?.id
@@ -67,7 +67,7 @@ internal struct FetchTests {
       }
 
       // Fetch by IDs
-      let fetchedIDs = await database.fetch(
+      let fetchedIDs = try await database.fetch(
         for: .descriptor(predicate: #Predicate<Parent> { parentIDs.contains($0.id) })
       ) { parents in
         parents.map(\.id)
@@ -89,7 +89,7 @@ internal struct FetchTests {
       }
 
       // Fetch by predicate
-      let fetchedID = await database.getOptional(
+      let fetchedID = try await database.getOptional(
         for: .predicate(
           #Predicate<Parent> { parent in
             parent.id == parentID
@@ -115,7 +115,7 @@ internal struct FetchTests {
       }
 
       // Fetch by value
-      let fetchedID = await database.getOptional(
+      let fetchedID = try await database.getOptional(
         for: .predicate(#Predicate<Parent> { $0.id == parentID })
       ) { parent in
         parent?.id
@@ -139,7 +139,7 @@ internal struct FetchTests {
       }
 
       // Fetch by values
-      let fetchedIDs = await database.fetch(
+      let fetchedIDs = try await database.fetch(
         for: .descriptor(predicate: #Predicate<Parent> { parentIDs.contains($0.id) })
       ) { parents in
         parents.map(\.id)

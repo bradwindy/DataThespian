@@ -56,10 +56,11 @@
     ///   - selector: A selector that specifies the model to retrieve.
     ///   - closure: A closure that performs additional operations on the retrieved model.
     /// - Returns: The result of the `closure` parameter.
+    /// - Throws: Any error thrown by `closure`, and any SwiftData error from the fetch.
     public func getOptional<PersistentModelType, U: Sendable>(
       for selector: Selector<PersistentModelType>.Get,
       with closure: @escaping @Sendable (PersistentModelType?) throws -> U
-    ) async rethrows -> U {
+    ) async throws -> U {
       try await self.withModelContext {
         try $0.getOptional(for: selector, with: closure)
       }
@@ -70,10 +71,11 @@
     ///   - selector: A selector that specifies the models to retrieve.
     ///   - closure: A closure that performs additional operations on the retrieved models.
     /// - Returns: The result of the `closure` parameter.
+    /// - Throws: Any error thrown by `closure`, and any SwiftData error from the fetch.
     public func fetch<PersistentModelType, U: Sendable>(
       for selector: Selector<PersistentModelType>.List,
       with closure: @escaping @Sendable ([PersistentModelType]) throws -> U
-    ) async rethrows -> U {
+    ) async throws -> U {
       try await self.withModelContext {
         try $0.fetch(for: selector, with: closure)
       }

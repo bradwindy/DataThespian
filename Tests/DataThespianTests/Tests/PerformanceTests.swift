@@ -26,7 +26,7 @@ internal struct PerformanceTests {
       let endTime = Date()
 
       // Verify all parents were inserted
-      let count = await database.fetch(for: .all(Parent.self)) { parents in
+      let count = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
       #expect(count == parentCount)
@@ -61,7 +61,7 @@ internal struct PerformanceTests {
       let endTime = Date()
 
       // Verify all parents were deleted
-      let newParentCount = await database.fetch(for: .all(Parent.self)) { parents in
+      let newParentCount = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
       #expect(newParentCount == 0)
@@ -88,7 +88,7 @@ internal struct PerformanceTests {
 
       // Measure bulk fetch performance
       let startTime = Date()
-      let fetchedIDs = await database.fetch(for: .all(Parent.self)) { parents in
+      let fetchedIDs = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.map(\.id)
       }
       let endTime = Date()

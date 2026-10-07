@@ -44,10 +44,11 @@
     /// Retrieves an optional model matching the given selector
     /// - Parameter selector: A selector defining the query criteria for retrieving the model
     /// - Returns: An optional wrapped Model instance if found, nil otherwise
+    /// - Throws: Any SwiftData error from the fetch.
     public func getOptional<PersistentModelType>(
       for selector: Selector<PersistentModelType>.Get
-    ) async -> Model<PersistentModelType>? {
-      await self.getOptional(for: selector) { persistentModel in
+    ) async throws -> Model<PersistentModelType>? {
+      try await self.getOptional(for: selector) { persistentModel in
         persistentModel.flatMap(Model.init)
       }
     }
@@ -55,10 +56,11 @@
     /// Fetches an array of models matching the given list selector
     /// - Parameter selector: A selector defining the query criteria for retrieving multiple models
     /// - Returns: An array of wrapped Model instances matching the selector criteria
+    /// - Throws: Any SwiftData error from the fetch. A failed fetch is never reported as `[]`.
     public func fetch<PersistentModelType>(
       for selector: Selector<PersistentModelType>.List
-    ) async -> [Model<PersistentModelType>] {
-      await self.fetch(for: selector) { persistentModels in
+    ) async throws -> [Model<PersistentModelType>] {
+      try await self.fetch(for: selector) { persistentModels in
         persistentModels.map(Model.init)
       }
     }
@@ -68,10 +70,11 @@
     ///   - selectors: An array of selectors to fetch models
     ///   - closure: A transformation closure to apply to each fetched model
     /// - Returns: An array of transformed results
+    /// - Throws: Any error thrown by `closure`, and any SwiftData error from a fetch.
     public func fetch<PersistentModelType, U: Sendable>(
       for selectors: [Selector<PersistentModelType>.Get],
       with closure: @escaping @Sendable (PersistentModelType) throws -> U
-    ) async rethrows -> [U] {
+    ) async throws -> [U] {
       try await withThrowingTaskGroup(
         of: Optional<U>.self,
         returning: [U].self,
@@ -157,14 +160,16 @@
     ///   - model: A closure that creates the model to insert
     ///   - selector: A closure that creates a selector from the model to check existence
     /// - Returns: Either the existing model or the newly inserted model
+    /// - Throws: Any SwiftData error from the existence check. A failed check never falls
+    ///   through to an insert.
     public func insertIf<PersistentModelType>(
       _ model: @Sendable @escaping () -> PersistentModelType,
       notExist selector: @Sendable @escaping (PersistentModelType) ->
         Selector<PersistentModelType>.Get
-    ) async -> Model<PersistentModelType> {
+    ) async throws -> Model<PersistentModelType> {
       let persistentModel = model()
       let selector = selector(persistentModel)
-      let modelOptional = await self.getOptional(for: selector)
+      let modelOptional = try await self.getOptional(for: selector)
 
       if let modelOptional {
         return modelOptional
@@ -186,7 +191,7 @@
         Selector<PersistentModelType>.Get,
       with closure: @escaping @Sendable (PersistentModelType) throws -> U
     ) async throws -> U {
-      let model = await self.insertIf(model, notExist: selector)
+      let model = try await self.insertIf(model, notExist: selector)
       return try await self.get(for: .model(model), with: closure)
     }
   }

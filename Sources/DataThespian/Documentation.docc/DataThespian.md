@@ -121,7 +121,7 @@ let item = try await database.get(for: .predicate(#Predicate<Item> {
 }))
 
 // Fetch a list with sorting
-let items = await database.fetch(for: .descriptor(
+let items = try await database.fetch(for: .descriptor(
     predicate: #Predicate<Item> { $0.isActive == true },
     sortBy: [SortDescriptor(\Item.timestamp, order: .reverse)],
     fetchLimit: 10

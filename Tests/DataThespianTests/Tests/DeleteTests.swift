@@ -22,7 +22,7 @@ internal struct DeleteTests {
       }
 
       // Verify initial count
-      let initialCount = await database.fetch(for: .all(Parent.self)) { parents in
+      let initialCount = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
       #expect(initialCount == 5)
@@ -31,7 +31,7 @@ internal struct DeleteTests {
       try await database.delete(.all(Parent.self))
 
       // Verify all parents were deleted
-      let parentCount = await database.fetch(for: .all(Parent.self)) { parents in
+      let parentCount = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
       #expect(parentCount == 0)
@@ -58,10 +58,10 @@ internal struct DeleteTests {
       }
 
       // Verify initial counts
-      let initialParentCount = await database.fetch(for: .all(Parent.self)) { parents in
+      let initialParentCount = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
-      let initialChildCount = await database.fetch(for: .all(Child.self)) { children in
+      let initialChildCount = try await database.fetch(for: .all(Child.self)) { children in
         children.count
       }
       #expect(initialParentCount == 3)
@@ -71,10 +71,10 @@ internal struct DeleteTests {
       try await database.delete(.all(Parent.self))
 
       // Verify only parents were deleted, not children
-      let parentCount = await database.fetch(for: .all(Parent.self)) { parents in
+      let parentCount = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
-      let childCount = await database.fetch(for: .all(Child.self)) { children in
+      let childCount = try await database.fetch(for: .all(Child.self)) { children in
         children.count
       }
       #expect(parentCount == 0)
@@ -109,7 +109,7 @@ internal struct DeleteTests {
       try await database.delete(.all(Parent.self))
 
       // Verify parents were deleted, and check remaining children
-      let parentCount = await database.fetch(for: .all(Parent.self)) { parents in
+      let parentCount = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
       #expect(parentCount == 0)

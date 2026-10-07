@@ -29,7 +29,6 @@
 
 #if canImport(SwiftData)
 import Foundation
-  import os.log
   public import SwiftData
 
   extension ModelActor where Self: Database {
@@ -58,7 +57,7 @@ import Foundation
     public func getOptional<PersistentModelType, U: Sendable>(
       for selector: Selector<PersistentModelType>.Get,
       with closure: @escaping @Sendable (PersistentModelType?) throws -> U
-    ) async rethrows -> U {
+    ) async throws -> U {
       guard case .model(let model) = selector else {
         return try await self.withModelContext {
           try $0.getOptional(for: selector, with: closure)
@@ -75,32 +74,6 @@ import Foundation
       return try await self.withModelContext { modelContext in
         try closure(modelContext.fetch(fetchDescriptor).first)
       }
-    }
-
-    /// Fetches an array of models matching the given list selector
-    /// - Parameter selector: A selector defining the query criteria for retrieving multiple models
-    /// - Returns: An array of wrapped Model instances matching the selector criteria
-    public func fetch<PersistentModelType>(for selector: Selector<PersistentModelType>.List)
-      async -> [Model<PersistentModelType>] where PersistentModelType: PersistentModel
-    {
-      let fetchedIdentifiers: [Model<PersistentModelType>]
-
-      guard case .descriptor(let descriptor) = selector else {
-        fatalError("Invalid selector: \(selector)")
-      }
-
-      do {
-        fetchedIdentifiers = try await self.withModelContext { modelContext in
-          try modelContext.fetchIdentifiers(descriptor).map(
-            Model<PersistentModelType>.init(persistentIdentifier:)
-          )
-        }
-      } catch {
-        os_log(.error, "Failed to fetch identifiers: %{public}@", error.localizedDescription)
-        return []
-      }
-
-      return fetchedIdentifiers
     }
   }
 #endif

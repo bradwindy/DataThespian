@@ -55,10 +55,12 @@
     ///   the retrieved `PersistentModelType` instance (or `nil`)
     ///   and returns a transformed result of type `U`.
     /// - Returns: The transformed result of type `U`.
+    /// - Throws: Any error thrown by `closure`, and any SwiftData error from the fetch itself.
+    ///   This is `throws` rather than `rethrows` because the fetch can fail on its own.
     func getOptional<PersistentModelType, U: Sendable>(
       for selector: Selector<PersistentModelType>.Get,
       with closure: @escaping @Sendable (PersistentModelType?) throws -> U
-    ) async rethrows -> U
+    ) async throws -> U
 
     /// Retrieves a list of persistent models from the data store and returns a transformed result.
     /// - Parameters:
@@ -67,10 +69,12 @@
     ///   - closure: A closure that performs some operation on t
     ///   he retrieved list of `PersistentModelType` instances and returns a transformed result of type `U`.
     /// - Returns: The transformed result of type `U`.
+    /// - Throws: Any error thrown by `closure`, and any SwiftData error from the fetch itself.
+    ///   This is `throws` rather than `rethrows` because the fetch can fail on its own.
     func fetch<PersistentModelType, U: Sendable>(
       for selector: Selector<PersistentModelType>.List,
       with closure: @escaping @Sendable ([PersistentModelType]) throws -> U
-    ) async rethrows -> U
+    ) async throws -> U
 
     /// Deletes one or more persistent models from the data store based on the provided selector.
     /// - Parameter selector: A `Selector<PersistentModelType>.Delete` instance

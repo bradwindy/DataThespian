@@ -18,7 +18,7 @@ internal struct BasicDatabaseTests {
         try context.save()
       }
 
-      let parentIDs = await database.fetch(for: .all(Parent.self)) { parents in
+      let parentIDs = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.map(\.id)
       }
 
@@ -38,7 +38,7 @@ internal struct BasicDatabaseTests {
       }
 
       // Verify insert
-      let initialCount = await database.fetch(for: .all(Parent.self)) { parents in
+      let initialCount = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
       #expect(initialCount == 1)
@@ -53,7 +53,7 @@ internal struct BasicDatabaseTests {
       )
 
       // Verify delete
-      let finalCount = await database.fetch(for: .all(Parent.self)) { parents in
+      let finalCount = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
       #expect(finalCount == 0)
@@ -76,7 +76,7 @@ internal struct BasicDatabaseTests {
       try await database.delete(.all(Parent.self))
 
       // Verify all parents were deleted
-      let parentCount = await database.fetch(for: .all(Parent.self)) { parents in
+      let parentCount = try await database.fetch(for: .all(Parent.self)) { parents in
         parents.count
       }
       #expect(parentCount == 0)

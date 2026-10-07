@@ -23,20 +23,12 @@ internal struct ModelActorTests {
       // Test getOptional with model selector
       let parentModels: [Model<Parent>]
       let parentIDs: [UUID]
-      #if swift(>=6.1)
-        parentModels = await database.fetch(for: .all(Parent.self))
-      #else
-        parentModels = await database.fetch<Parent>(for: .all(Parent.self))
-      #endif
+      parentModels = try await database.fetch(for: .all(Parent.self))
 
       let selectors = parentModels.map { Selector<Parent>.Get.model($0) }
       #expect(parentModels.count == 1)
 
-      #if swift(>=6.1)
-        parentIDs = await database.fetch(for: selectors) { $0.id }
-      #else
-        parentIDs = try await database.fetch<Parent>(for: selectors) { $0.id }
-      #endif
+      parentIDs = try await database.fetch(for: selectors) { $0.id }
 
       #expect(parentIDs.count == 1)
       #expect(parentIDs.first == parentID)
@@ -56,7 +48,7 @@ internal struct ModelActorTests {
 
       // Test getOptional with predicate selector
       let predicate = #Predicate<Parent> { $0.id == parentID }
-      let result = await database.getOptional(
+      let result = try await database.getOptional(
         for: .predicate(predicate)
       ) { $0?.id }
 
@@ -81,15 +73,12 @@ internal struct ModelActorTests {
       let descriptor = FetchDescriptor<Parent>()
 
       // Test fetch with descriptor
-      let fetchedModels = await database.fetch(for: .descriptor(descriptor))
+      let fetchedModels = try await database.fetch(for: .descriptor(descriptor))
 
       #expect(fetchedModels.count == parentIDs.count)
 
-      // Test error handling by trying to fetch with an invalid selector
-      // This should log an error and return an empty array
-      let emptyResult = await database.fetch(for: .all(Parent.self))
-      #expect(
-        emptyResult.count == 3, "Should still return results despite the invalid selector case")
+      let allModels = try await database.fetch(for: .all(Parent.self))
+      #expect(allModels.count == 3)
     #endif
   }
 }
