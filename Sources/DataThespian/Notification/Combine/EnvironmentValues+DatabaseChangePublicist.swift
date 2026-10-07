@@ -34,6 +34,8 @@
 
   extension EnvironmentValues {
     /// A `DatabaseChangePublicist` that determines how database changes are propagated to the UI.
-    @Entry public var databaseChangePublicist: DatabaseChangePublicist = .never()
+    ///
+    /// Until one is injected, the default publishes nothing and logs a warning when used.
+    @Entry public var databaseChangePublicist: DatabaseChangePublicist = .unconfigured()
   }
 #endif

@@ -31,18 +31,26 @@
   public import Combine
 
   private struct NeverDatabaseMonitor: DatabaseMonitoring {
-    /// Registers an agent with the database monitor, but always fails.
-    /// - Parameters:
-    ///   - _: The agent to register.
-    ///   - _: A flag indicating whether the registration should be forced.
-    func register(_: any AgentRegister, force _: Bool) {
-      assertionFailure("Using Empty Database Listener")
+    /// Ignores the registration, so nothing is ever published.
+    func register(_: any AgentRegister, force _: Bool) {}
+  }
+
+  /// The monitor behind the SwiftUI environment default, used when no publicist was injected.
+  private struct UnconfiguredDatabaseMonitor: DatabaseMonitoring, Loggable {
+    static var loggingCategory: ThespianLogging.Category { .application }
+
+    /// Logs a warning and ignores the registration.
+    func register(_ registration: any AgentRegister, force _: Bool) {
+      Self.logger.warning(
+        // swiftlint:disable:next line_length
+        "databaseChangePublicist used for \(registration.id, privacy: .public) without being set in the environment; no changes will be published."
+      )
     }
   }
 
   /// A struct that publishes database change events.
   public struct DatabaseChangePublicist: Sendable {
-    private let dbWatcher: DatabaseMonitoring
+    private let dbWatcher: any DatabaseMonitoring
 
     /// Initializes a new `DatabaseChangePublicist` instance.
     /// - Parameter dbWatcher: The database monitoring instance to use. Defaults to `DataMonitor.shared`.
@@ -51,17 +59,30 @@
     }
 
     /// Creates a `DatabaseChangePublicist` that never publishes any changes.
+    ///
+    /// Subscribing to it is safe: it never asserts and never emits.
     public static func never() -> DatabaseChangePublicist {
       self.init(dbWatcher: NeverDatabaseMonitor())
     }
 
+    /// The SwiftUI environment default: publishes nothing and logs a warning when used,
+    /// so a missing injection shows up in the log instead of crashing a preview.
+    internal static func unconfigured() -> DatabaseChangePublicist {
+      self.init(dbWatcher: UnconfiguredDatabaseMonitor())
+    }
+
     /// Publishes database change events for the specified ID.
+    ///
+    /// Calling this again with the same ID replaces the earlier publisher, which then completes.
+    /// Like any `PassthroughSubject`, the publisher drops change sets sent before you subscribe.
+    /// When the publisher and all its subscriptions are released, the registration is removed
+    /// on the next change.
+    ///
     /// - Parameter id: The ID of the entity to watch for changes.
     /// - Returns: A publisher that emits `DatabaseChangeSet` values
     /// whenever the database changes for the specified ID.
     @Sendable public func callAsFunction(id: String) -> some Publisher<any DatabaseChangeSet, Never>
     {
-      // print("Creating Publisher for \(id)")
       let subject = PassthroughSubject<any DatabaseChangeSet, Never>()
       dbWatcher.register(PublishingRegister(id: id, subject: subject), force: true)
       return subject
