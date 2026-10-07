@@ -64,6 +64,17 @@
     }
 
     /// Initializes a `CollectionDifference` instance by comparing the persistent models and data.
+    ///
+    /// Duplicate identifiers never trap:
+    /// - For persistent models, the first model with an identifier is kept and every later
+    ///   model with the same identifier goes into ``modelsToDelete``, so synchronising the
+    ///   difference collapses the duplicate rows.
+    /// - For data, the last item with an identifier wins, at the position where that identifier
+    ///   first appears.
+    ///
+    /// ``inserts`` and ``updates`` follow the order of `data`, and ``modelsToDelete`` follows
+    /// the order of `persistentModels`.
+    ///
     /// - Parameters:
     ///   - persistentModels: The persistent models to compare.
     ///   - data: The data to compare.
@@ -75,39 +86,37 @@
       persistentModelKeyPath: KeyPath<PersistentModelType, ID>,
       dataKeyPath: KeyPath<DataType, ID>
     ) {
-      let persistentModels = persistentModels ?? []
-      let entryMap: [ID: PersistentModelType] =
-        .init(
-          uniqueKeysWithValues: persistentModels.map {
-            ($0[keyPath: persistentModelKeyPath], $0)
-          }
-        )
-
-      let data = data ?? []
-      let dataMap: [ID: DataType] = .init(
-        uniqueKeysWithValues: data.map {
-          ($0[keyPath: dataKeyPath], $0)
+      var entryMap: [ID: PersistentModelType] = [:]
+      var entryOrder: [ID] = []
+      var duplicateEntries: [PersistentModelType] = []
+      for model in persistentModels ?? [] {
+        let id = model[keyPath: persistentModelKeyPath]
+        if entryMap[id] == nil {
+          entryMap[id] = model
+          entryOrder.append(id)
+        } else {
+          duplicateEntries.append(model)
         }
-      )
-
-      let entryIDsToUpdate = Set(entryMap.keys).intersection(dataMap.keys)
-      let entryIDsToDelete = Set(entryMap.keys).subtracting(dataMap.keys)
-      let entryIDsToInsert = Set(dataMap.keys).subtracting(entryMap.keys)
-
-      let entriesToDelete = entryIDsToDelete.compactMap { entryMap[$0] }.map(Model.init)
-      let entryItemsToInsert = entryIDsToInsert.compactMap { dataMap[$0] }
-      let entriesToUpdate = entryIDsToUpdate.compactMap {
-        dataMap[$0]
       }
 
-      assert(entryIDsToUpdate.count == entriesToUpdate.count)
-      assert(entryIDsToDelete.count == entriesToDelete.count)
-      assert(entryItemsToInsert.count == entryIDsToInsert.count)
+      var dataMap: [ID: DataType] = [:]
+      var dataOrder: [ID] = []
+      for item in data ?? [] {
+        let id = item[keyPath: dataKeyPath]
+        if dataMap.updateValue(item, forKey: id) == nil {
+          dataOrder.append(id)
+        }
+      }
+
+      let inserts = dataOrder.filter { entryMap[$0] == nil }.compactMap { dataMap[$0] }
+      let updates = dataOrder.filter { entryMap[$0] != nil }.compactMap { dataMap[$0] }
+      let entriesToDelete =
+        entryOrder.filter { dataMap[$0] == nil }.compactMap { entryMap[$0] } + duplicateEntries
 
       self.init(
-        inserts: entryItemsToInsert,
-        modelsToDelete: entriesToDelete,
-        updates: entriesToUpdate
+        inserts: inserts,
+        modelsToDelete: entriesToDelete.map(Model.init),
+        updates: updates
       )
     }
   }
