@@ -28,6 +28,7 @@
 //
 
 #if canImport(SwiftData)
+  public import Foundation
   public import SwiftData
   /// An error that occurs when a query fails to find an item.
   public enum QueryError<PersistentModelType: PersistentModel>: Error {
@@ -35,5 +36,20 @@
     ///
     /// - Parameter selector: The `Selector.Get` instance that was used to perform the query.
     case itemNotFound(Selector<PersistentModelType>.Get)
+  }
+
+  extension QueryError: LocalizedError, CustomStringConvertible {
+    /// A description naming the model type and the selector that matched nothing.
+    public var description: String {
+      switch self {
+      case .itemNotFound(let selector):
+        "No \(PersistentModelType.self) found for \(String(describing: selector))"
+      }
+    }
+
+    /// The same text as ``description``, so `localizedDescription` names the model type.
+    public var errorDescription: String? {
+      description
+    }
   }
 #endif

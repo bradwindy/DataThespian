@@ -32,8 +32,12 @@
   public import SwiftData
   /// Phantom Type for easily retrieving fetching `PersistentModel` objects from a `ModelContext`.
   public struct Model<T: PersistentModel>: Sendable, Identifiable {
-    /// An error that is thrown when a `PersistentModel`
-    /// with the specified `PersistentIdentifier` is not found.
+    /// An error describing a `PersistentModel` that was not found.
+    ///
+    /// DataThespian never throws this error. Lookups throw ``QueryError/itemNotFound(_:)``.
+    @available(
+      *, deprecated, message: "Never thrown; lookups throw QueryError.itemNotFound. Catch that instead."
+    )
     public struct NotFoundError: Error {
       /// The `PersistentIdentifier` of the `PersistentModel` that was not found.
       public let persistentIdentifier: PersistentIdentifier
