@@ -32,11 +32,18 @@
   import Foundation
 
   /// An actor that manages the publishing of database change sets.
+  ///
+  /// Change sets are queued in order and sent to the subject on the main actor.
+  /// The agent holds the subject weakly: once the caller and every subscriber have
+  /// released it, the agent finishes on the next change and unregisters itself.
   internal actor PublishingAgent: DataAgent, Loggable {
-    /// The subscription event.
-    private enum SubscriptionEvent: Sendable {
-      case cancel
-      case subscribe
+    /// Holds the subject weakly. It is only read on the main actor.
+    private final class WeakSubject: @unchecked Sendable {
+      weak var subject: PassthroughSubject<any DatabaseChangeSet, Never>?
+
+      init(_ subject: PassthroughSubject<any DatabaseChangeSet, Never>) {
+        self.subject = subject
+      }
     }
 
     /// The logging category for the `PublishingAgent`.
@@ -48,17 +55,14 @@
     /// The identifier for the agent.
     private let id: String
 
-    /// The subject that publishes the database change sets.
-    private let subject: PassthroughSubject<any DatabaseChangeSet, Never>
-
-    /// The number of subscriptions.
-    private var subscriptionCount = 0
-
-    /// The cancellable for the subject.
-    private var cancellable: AnyCancellable?
+    /// Change sets waiting to be sent to the subject, in arrival order.
+    private let updates: AsyncStream<any DatabaseChangeSet>.Continuation
 
     /// The completion closure.
     private var completed: (@Sendable () -> Void)?
+
+    /// Whether ``finish()`` has run.
+    private var isFinished = false
 
     /// Initializes a new `PublishingAgent` instance.
     /// - Parameters:
@@ -66,69 +70,29 @@
     ///   - subject: The subject that publishes the database change sets.
     internal init(id: String, subject: PassthroughSubject<any DatabaseChangeSet, Never>) {
       self.id = id
-      self.subject = subject
-      Task { await self.initialize() }
-    }
-
-    /// Initializes the agent.
-    private func initialize() {
-      cancellable = subject.handleEvents { _ in
-        self.onSubscriptionEvent(.subscribe)
-      } receiveCancel: {
-        self.onSubscriptionEvent(.cancel)
-      }
-      .sink {
-        _ in
-      }
-    }
-
-    /// Handles a subscription event.
-    /// - Parameter event: The subscription event.
-    private nonisolated func onSubscriptionEvent(_ event: SubscriptionEvent) {
-      Task { await self.updateScriptionStatus(byEvent: event) }
-    }
-
-    /// Updates the subscription status.
-    /// - Parameter event: The subscription event.
-    private func updateScriptionStatus(byEvent event: SubscriptionEvent) {
-      let oldCount = subscriptionCount
-      let delta: Int =
-        switch event {
-        case .cancel: -1
-        case .subscribe: 1
+      let (stream, updates) = AsyncStream.makeStream(of: (any DatabaseChangeSet).self)
+      self.updates = updates
+      let box = WeakSubject(subject)
+      Task { @MainActor [weak self] in
+        for await update in stream {
+          guard let subject = box.subject else {
+            break
+          }
+          subject.send(update)
         }
+        box.subject?.send(completion: .finished)
+        await self?.finish()
+      }
+    }
 
-      subscriptionCount += delta
-      Self.logger.debug(
-        // swiftlint:disable:next line_length
-        "Updated Subscriptions for \(self.id) from \(oldCount) by \(delta) to \(self.subscriptionCount) \(self.agentID)"
-      )
+    deinit {
+      updates.finish()
     }
 
     /// Handles an update to the database.
     /// - Parameter update: The database change set.
     nonisolated internal func onUpdate(_ update: any DatabaseChangeSet) {
-      Task { await self.sendUpdate(update) }
-    }
-
-    /// Sends the update to the subject.
-    /// - Parameter update: The database change set.
-    private func sendUpdate(_ update: any DatabaseChangeSet) {
-      #if swift(>=6.1)
-        Task { @MainActor in self.subject.send(update) }
-      #else
-
-        Task { @MainActor in await self.subject.send(update) }
-      #endif
-    }
-
-    /// Cancels the agent.
-    private func cancel() {
-      Self.logger.debug("Cancelling \(self.id) \(self.agentID)")
-      cancellable?.cancel()
-      cancellable = nil
-      completed?()
-      completed = nil
+      updates.yield(update)
     }
 
     /// Sets the completion closure.
@@ -137,15 +101,29 @@
       Task { await self.setCompleted(closure) }
     }
 
-    /// Sets the completion closure.
+    /// Sets the completion closure, or calls it at once if the agent has already finished.
     /// - Parameter closure: The completion closure.
     internal func setCompleted(_ closure: @escaping @Sendable () -> Void) {
-      Self.logger.debug("SetCompleted \(self.id) \(self.agentID)")
-      assert(completed == nil)
+      guard !isFinished else {
+        closure()
+        return
+      }
+      Self.logger.debug("SetCompleted \(self.id, privacy: .public) \(self.agentID, privacy: .public)")
       completed = closure
     }
 
-    /// Finishes the agent.
-    internal func finish() { cancel() }
+    /// Finishes the agent: the subject completes once queued change sets are sent,
+    /// and the completion closure runs. Calling it again has no effect.
+    internal func finish() {
+      guard !isFinished else {
+        return
+      }
+      isFinished = true
+      Self.logger.debug("Finishing \(self.id, privacy: .public) \(self.agentID, privacy: .public)")
+      updates.finish()
+      let completed = self.completed
+      self.completed = nil
+      completed?()
+    }
   }
 #endif

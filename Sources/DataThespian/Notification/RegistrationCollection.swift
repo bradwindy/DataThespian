@@ -29,65 +29,87 @@
 
 #if canImport(SwiftData)
   import Foundation
+
   /// An actor that manages a collection of `DataAgent` registrations.
   internal actor RegistrationCollection: Loggable {
     internal static var loggingCategory: ThespianLogging.Category { .application }
 
-    private var registrations = [String: DataAgent]()
+    private var registrations = [String: any DataAgent]()
 
-    /// Notifies the collection of a database change set update.
-    /// - Parameter update: The database change set update.
-    nonisolated internal func notify(_ update: any DatabaseChangeSet) {
-      Task {
-        await self.onUpdate(update)
-        Self.logger.debug("Notification Complete")
-      }
+    /// Whether no agent is registered.
+    internal var isEmpty: Bool { registrations.isEmpty }
+
+    /// The number of registered agents.
+    internal var count: Int { registrations.count }
+
+    /// The `agentID` of the agent registered under `id`, if any.
+    internal func agentID(forID id: String) -> UUID? {
+      registrations[id]?.agentID
     }
 
     /// Adds a new `DataAgent` registration to the collection.
+    ///
+    /// The agent is built first. The existing registration is then read and replaced with
+    /// no suspension point in between, so two registrations for one id cannot both win.
+    /// An agent that loses, or that a forced registration displaces, is finished.
+    ///
     /// - Parameters:
     ///   - id: The unique identifier for the registration.
-    ///   - force: A Boolean value indicating whether to force the registration if it already exists.
+    ///   - force: A Boolean value indicating whether to replace an existing registration.
     ///   - agent: A closure that creates the `DataAgent` to be registered.
-    nonisolated internal func add(
-      withID id: String, force: Bool, agent: @Sendable @escaping () async -> DataAgent
-    ) {
-      Task { await self.append(withID: id, force: force, agent: agent) }
-    }
-
-    private func append(
-      withID id: String, force: Bool, agent: @Sendable @escaping () async -> DataAgent
+    internal func append(
+      withID id: String, force: Bool, agent makeAgent: @Sendable @escaping () async -> any DataAgent
     ) async {
-      if let registration = registrations[id], force {
-        Self.logger.debug("Overwriting \(id). Already exists.")
-        await registration.finish()
-      } else if registrations[id] != nil {
-        Self.logger.debug("Can't register \(id). Already exists.")
+      if !force, registrations[id] != nil {
+        Self.logger.debug("Can't register \(id, privacy: .public). Already exists.")
         return
       }
-      Self.logger.debug("Registering \(id)")
-      let agent = await agent()
-      agent.onCompleted { Task { await self.remove(withID: id, agentID: agent.agentID) } }
+      let agent = await makeAgent()
+
+      // No suspension from this read until the store below.
+      let existing = registrations[id]
+      if existing != nil, !force {
+        Self.logger.debug("Can't register \(id, privacy: .public). Already exists.")
+        if existing?.agentID != agent.agentID {
+          await agent.finish()
+        }
+        return
+      }
       registrations[id] = agent
-      Self.logger.debug("Registration Count \(self.registrations.count)")
+      let agentID = agent.agentID
+      agent.onCompleted { [weak self] in
+        Task { await self?.remove(withID: id, agentID: agentID) }
+      }
+      Self.logger.debug(
+        "Registered \(id, privacy: .public) \(agentID, privacy: .public). Count \(self.registrations.count)"
+      )
+
+      if let existing, existing.agentID != agentID {
+        Self.logger.debug("Replaced \(id, privacy: .public) \(existing.agentID, privacy: .public)")
+        await existing.finish()
+      }
     }
 
     private func remove(withID id: String, agentID: UUID) {
       guard let agent = registrations[id] else {
-        Self.logger.warning("No matching registration with id: \(id)")
+        Self.logger.warning("No matching registration with id: \(id, privacy: .public)")
         return
       }
       guard agent.agentID == agentID else {
-        Self.logger.warning("No matching registration with agentID: \(agentID)")
+        // Expected when a forced registration replaced this agent.
+        Self.logger.debug(
+          "Registration \(id, privacy: .public) already replaced; ignoring \(agentID, privacy: .public)"
+        )
         return
       }
       registrations.removeValue(forKey: id)
       Self.logger.debug("Registration Count \(self.registrations.count)")
     }
 
-    private func onUpdate(_ update: any DatabaseChangeSet) {
+    /// Passes a change set to every registered agent.
+    internal func onUpdate(_ update: any DatabaseChangeSet) {
       for (id, registration) in registrations {
-        Self.logger.debug("Notifying \(id)")
+        Self.logger.debug("Notifying \(id, privacy: .public)")
         registration.onUpdate(update)
       }
     }
