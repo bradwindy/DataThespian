@@ -44,7 +44,7 @@
     ///
     /// - Parameter closure: A closure that takes a `ModelContext` and returns a value of type `T`.
     /// - Returns: The value returned by the provided closure.
-    func withModelContext<T>(_ closure: (ModelContext) throws -> T) async rethrows -> T {
+    func withModelContext<T: Sendable>(_ closure: (ModelContext) throws -> T) async rethrows -> T {
       assertionFailure("No Database Set.")
       fatalError("No Database Set.")
     }

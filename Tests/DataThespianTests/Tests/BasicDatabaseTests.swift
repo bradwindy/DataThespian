@@ -82,4 +82,38 @@ internal struct BasicDatabaseTests {
       #expect(parentCount == 0)
     #endif
   }
+
+  /// `withModelContext` requires a `Sendable` result. Returning a `Sendable` snapshot through
+  /// `BackgroundDatabase` and through `any Database` still works.
+  ///
+  /// The negative case cannot be expressed as a test: with the constraint in place,
+  /// `withModelContext { $0 }` and `withModelContext { try $0.fetch(FetchDescriptor<Parent>()) }`
+  /// fail to compile because `ModelContext` and `Parent` are not `Sendable`.
+  @Test internal func withModelContextReturnsSendableSnapshot() async throws {
+    #if canImport(SwiftData)
+      let container = try ModelContainer(
+        for: Parent.self, Child.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+      )
+      let background = BackgroundDatabase(modelContainer: container)
+      let parentIDs = [UUID(), UUID()]
+      try await background.withModelContext { context in
+        for id in parentIDs {
+          context.insert(Parent(id: id))
+        }
+        try context.save()
+      }
+
+      let count = try await background.withModelContext { context in
+        try context.fetchCount(FetchDescriptor<Parent>())
+      }
+      #expect(count == 2)
+
+      let database: any Database = background
+      let ids = try await database.withModelContext { context in
+        try context.fetch(FetchDescriptor<Parent>()).map(\.id)
+      }
+      #expect(Set(ids) == Set(parentIDs))
+    #endif
+  }
 }

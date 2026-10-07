@@ -36,10 +36,15 @@
   public protocol Database: Sendable, Queryable {
     /// Executes a closure safely within the context of a model.
     ///
+    /// `T` must be `Sendable`, so the closure cannot hand the `ModelContext` or a live
+    /// `PersistentModel` back to the caller's executor. Map models to `Sendable` values
+    /// (for example ``Model`` identifiers or plain structs) inside the closure.
+    /// `withModelContext { $0 }` is rejected by the compiler on purpose.
+    ///
     /// - Parameter closure: A closure that takes a `ModelContext`
     /// and returns a `Sendable` value of type `T`.
     /// - Returns: The value returned by the closure.
-    func withModelContext<T>(_ closure: @Sendable @escaping (ModelContext) throws -> T)
+    func withModelContext<T: Sendable>(_ closure: @Sendable @escaping (ModelContext) throws -> T)
       async rethrows -> T
   }
 #endif

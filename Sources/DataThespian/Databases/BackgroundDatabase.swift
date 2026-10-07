@@ -80,9 +80,9 @@
     /// Executes the given closure within the context of the database's model context.
     /// - Parameter closure: A closure that performs operations within the model context.
     /// - Returns: The result of the closure.
-    public func withModelContext<T>(_ closure: @Sendable @escaping (ModelContext) throws -> T)
-      async rethrows -> T
-    {
+    public func withModelContext<T: Sendable>(
+      _ closure: @Sendable @escaping (ModelContext) throws -> T
+    ) async rethrows -> T {
       try await self.database.withModelContext(closure)
     }
   }
