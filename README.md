@@ -30,6 +30,8 @@
 
 # Introduction
 
+> This is the `bradwindy/DataThespian` fork. Its fixes include source-breaking API changes; see [CHANGELOG.md](CHANGELOG.md) before upgrading.
+
 DataThespian is [a thread-safe SwiftData implementation that uses the power of ModelActors](https://brightdigit.com/tutorials/swiftdata-modelactor/) to provide an optimized and type-safe database interface. It offers a clean API for common database operations while maintaining concurrency safety and preventing common SwiftData pitfalls.
 
 Key features:

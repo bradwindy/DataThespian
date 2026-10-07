@@ -28,7 +28,12 @@ let package = Package(
     )
   ],
   dependencies: [
-    .package(url: "https://github.com/bradwindy/FelinePine.git", from: "1.0.0-beta.2"),
+    // The fork's fixes are on its trig-fixes branch, which carries no version tag above the
+    // upstream 1.0.0. Pin the fixed revision; switch to `from:` once the fork tags a release.
+    .package(
+      url: "https://github.com/bradwindy/FelinePine.git",
+      revision: "611c626d33ae20ab6058f33f8c955938931575be"
+    ),
     .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0"),
   ],
   targets: [

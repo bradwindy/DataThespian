@@ -39,6 +39,32 @@ internal struct TransactionTests {
       #expect(count == 0)
     }
 
+    /// Another caller's unsaved insert shares the database's context. A failed transaction
+    /// must discard only its own insert, not roll that pending work back with it.
+    @Test(arguments: DatabaseKind.allCases)
+    internal func failedTransactionKeepsOtherPendingChanges(kind: DatabaseKind) async throws {
+      let container = try DatabaseKind.makeContainer(for: Parent.self, Child.self)
+      let database = kind.makeDatabase(modelContainer: container)
+      let pendingID = UUID()
+
+      _ = await database.insert { Parent(id: pendingID) }
+      // The transaction must start on a dirty context for this to test anything.
+      let dirtyOnEntry = await database.withModelContext { $0.hasChanges }
+      #expect(dirtyOnEntry == true)
+
+      await #expect(throws: TransactionFailure.self) {
+        try await database.transaction { context in
+          context.insert(Parent(id: UUID()))
+          throw TransactionFailure()
+        }
+      }
+
+      try await database.save()
+
+      let stored = try ModelContext(container).fetch(FetchDescriptor<Parent>()).map(\.id)
+      #expect(stored == [pendingID])
+    }
+
     @Test(arguments: DatabaseKind.allCases)
     internal func successfulTransactionSaves(kind: DatabaseKind) async throws {
       let container = try DatabaseKind.makeContainer(for: Parent.self, Child.self)
