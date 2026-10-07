@@ -1,11 +1,8 @@
 # Changelog
 
-## Unreleased (trig-fixes fork)
+## 2.0.0 (2026-10-07, bradwindy fork)
 
-Depends on the `bradwindy/FelinePine` fork, pinned to its fixed `trig-fixes` revision
-because that fork has no release tag above upstream 1.0.0 yet. SwiftPM does not let a
-package required by version depend on a revision, so while the pin stays, depend on this
-fork by `revision:` or `branch:` too. Switch both to `from:` once the forks tag releases.
+Depends on the `bradwindy/FelinePine` fork, 2.0.0 or later.
 
 ### Source-breaking
 
